@@ -35,14 +35,15 @@ class Processes implements ArrayAccess, Countable
     public const CPU_P = '%cpu';
     public const MEM_P = '%mem';
     public const MEMORY = 'memory';
+    public const TIME = 'time';
     public const COMM = 'comm';
     public const ARGS = 'args';
     public const COMM_AND_ARGS = 'commAndArgs';
     public const COMMAND_TITLE = 'COMMAND';
 
-    public const COLUMNS = [self::PID, self::PPID, self::UID, self::CPU_P, self::MEM_P, self::COMM, self::ARGS];
+    public const COLUMNS = [self::PID, self::PPID, self::UID, self::CPU_P, self::MEM_P, self::TIME, self::COMM, self::ARGS];
     public const REGEX = <<<REGEXP
-/^[\s]*(?<pid>\d+)[\s]+(?<ppid>\d+)[\s]+(?<uid>\d+)[\s]+(?<cpu>\d+\.\d+)[\s]+(?<memory>\d+\.\d+)[\s]+(?<commAndArgs>.*)/
+/^[\s]*(?<pid>\d+)[\s]+(?<ppid>\d+)[\s]+(?<uid>\d+)[\s]+(?<cpu>\d+\.\d+)[\s]+(?<memory>\d+\.\d+)[\s]+(?<time>[-\d:.]+)[\s]+(?<commAndArgs>.*)/
 REGEXP;
 
     public const SHORT_REGEX = '/^[\s]*(?<pid>\d+)[\s]+(?<ppid>\d+)[\s]+(?<cmd>.*)/';
@@ -209,6 +210,7 @@ REGEXP;
                     (int)$matches[self::UID],
                     (float)$matches[self::CPU],
                     (float)$matches[self::MEMORY],
+                    self::parseTime($matches[self::TIME]),
                     substr($line, $nameStart, $nameLen),
                     substr($line, $cmdStart)
                 );
@@ -278,7 +280,7 @@ REGEXP;
             }
             try {
                 $pid = (int)$matches[self::PID];
-                $this->fillProcessValues($processes, $pid, (int)$matches[self::PPID], 0, 0, 0, $matches[self::CMD], '');
+                $this->fillProcessValues($processes, $pid, (int)$matches[self::PPID], 0, 0, 0, 0, $matches[self::CMD], '');
             } catch (Throwable $e) {
 
             }
@@ -326,6 +328,7 @@ REGEXP;
                     (int)$matches[self::UID],
                     (float)$matches[self::CPU],
                     (float)$matches[self::MEMORY],
+                    $this->parseTime($matches[self::TIME]),
                     $name,
                     $cmd
                 );
@@ -370,7 +373,7 @@ REGEXP;
                 $val = trim(implode(' ', $split));
 
                 if (!isset($processes[$pid])) {
-                    $this->fillProcessValues($processes, $pid, -1, -1, 0, 0, '', '');
+                    $this->fillProcessValues($processes, $pid, -1, -1, 0, 0, 0, '', '');
                 }
 
                 $this->castValues($processes, $cmd, $pid, $val);
@@ -404,7 +407,7 @@ REGEXP;
      * @param string $command
      */
     private function fillProcessValues(
-        array &$processes, int $pid, int $ppid, int $uid, float $cpu, float $memory, string $name, string $command
+        array &$processes, int $pid, int $ppid, int $uid, float $cpu, float $memory, float $time, string $name, string $command
     ): void
     {
         $processes[$pid] = [
@@ -413,6 +416,7 @@ REGEXP;
             self::UID => $uid,
             self::CPU => $cpu,
             self::MEMORY => $memory,
+            self::TIME => $time,
             self::NAME => trim($name),
             self::CMD => trim($command),
         ];
@@ -505,5 +509,28 @@ REGEXP;
     public function count(): int
     {
         return count($this->processes);
+    }
+
+    /**
+     * @param string $time
+     */
+    public static function parseTime($time): float
+    {
+        // [[dd-]hh:]mm:ss.ss
+        $parts = preg_split('/[-:]/', $time);
+
+        $seconds = (float) array_pop($parts);
+
+        if (($minutes = array_pop($parts)) !== null) {
+            $seconds += $minutes * 60;
+            if (($hours = array_pop($parts)) !== null) {
+                $seconds += $hours * 60 * 60;
+                if (($days = array_pop($parts)) !== null) {
+                    $seconds += $days * 60 * 60 * 24;
+                }
+            }
+        }
+
+        return $seconds;
     }
 }

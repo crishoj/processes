@@ -61,6 +61,7 @@ class ProcessesTest extends TestCase
         // in busybox environment COMMAND is always empty
         if ($processes->getResultType() !== Processes::BUSY_BOX_RESULT) {
             $this->assertGreaterThan(0, strlen($processInformation[Processes::CMD]), 'Command length');
+            $this->assertGreaterThanOrEqual(0, strlen($processInformation[Processes::TIME]), 'Command length');
         }
 
         $process->stop();
